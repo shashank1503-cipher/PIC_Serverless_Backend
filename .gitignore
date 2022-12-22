@@ -1,0 +1,8 @@
+partners-in-crime-38309-firebase-adminsdk-q3sfa-52f5da4144.json
+*.pyc
+__pycache__
+venv
+google-credentials.json
+*.zip
+lib
+.env
