@@ -802,43 +802,54 @@ async def updateuserpic(req: Request):
 # FETCH
 # fetch
 @app.get('/search')
-def findkey(req: Request, q):
-    
-    count = db.users.count_documents({"name": {"$regex": q, "$options": "i"}})
-    cursor = db.users.find({"name": {"$regex": q, "$options": "i"}})
+def findkey(req: Request, q: str, page: int = 1, per_page: int = 10, sort: str = "name", order: str = "asc",batch: int = 1):
+    user = asyncio.run(verify(req.headers.get("Authorization")))
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
     res = {}
     res["meta"] = {}
     res["data"] = []
-    for i in list(cursor):
-        i["_id"] = str(i["_id"])
-        res["data"].append(i)
-    res["meta"] = {"count": count}
-    cursor = db.skills.find_one({"name": {"$regex": q, "$options": "i"}})
-    if (cursor):
-        main_skill = cursor["name"]
-        sub_skills = cursor["subskills"]
-        fetch_main_profile = db.users.find(
-            {"skills": {"$regex": main_skill, "$options": "i"}})
-        for i in list(fetch_main_profile):
-            i["_id"] = str(i["_id"])
-            res["data"].append(i)
-        for sub_skill in sub_skills:
-            fetch_sub_profile = db.users.find(
-                {"skills": {"$regex": sub_skill, "$options": "i"}})
-            for i in list(fetch_sub_profile):
-                i["_id"] = str(i["_id"])
+    order = -1 if order == "desc" else 1
+    query1  = {"name": {"$regex": q, "$options": "i"}} 
 
-                res["data"].append(i)
-    else:
-        fetch_query = db.users.find({"skills": {"$regex": q, "$options": "i"}})
-        for i in list(fetch_query):
+    fetch_related_skills = db['skills'].find_one(query1)
+    if fetch_related_skills:
+        main_skill = fetch_related_skills["name"]
+        # print(main_skill)
+        sub_skills = fetch_related_skills["subskills"]
+        # print(sub_skills)
+        regex_sub_skills = "|".join(sub_skills)
+        # print(regex_sub_skills)
+        query2 = {"$or": [{"skills": {"$regex": main_skill, "$options": "i"}}, {"skills": {"$regex": regex_sub_skills, "$options": "i"}}]}
+        query3 = {"skills": {"$regex": main_skill, "$options": "i"}}
+        if batch != 1:
+            batch = str(batch)
+            query2 = {"$and": [{"$or": [{"skills": {"$regex": main_skill, "$options": "i"}}, {"skills": {"$regex": regex_sub_skills, "$options": "i"}}]}, {"batch": batch}]}
+            query3 = {"$and": [{"skills": {"$regex": main_skill, "$options": "i"}}, {"batch": batch}]}
+        if sub_skills:
+            regex_sub_skills = "|".join(sub_skills)
+            fetch_profiles = db['users'].find(query2).sort(sort, order).skip((page - 1) * per_page).limit(per_page)
+            count = db['users'].count_documents(query2)
+        else:
+            fetch_profiles = db['users'].find(query3).sort(sort, order).skip((page - 1) * per_page).limit(per_page)
+            count = db['users'].count_documents(query3)
+        for i in list(fetch_profiles):
             i["_id"] = str(i["_id"])
             res["data"].append(i)
         res["meta"] = {"count": count}
-    hashmap = {}
-    for i in res["data"]:
-        hashmap[i["_id"]] = i
-    res["data"] = [hashmap[k] for k in hashmap]
+    else:
+        
+        query4 = {"$or": [{"name": {"$regex": q, "$options": "i"}},{"skills": {"$regex": q, "$options": "i"}}]}
+        if batch != 1:
+            batch = str(batch)
+            query4 = {"$and": [{"$or": [{"name": {"$regex": q, "$options": "i"}},{"skills": {"$regex": q, "$options": "i"}}]}, {"batch": batch}]}
+        count = db['users'].count_documents(query4)
+        fetch_query = db['users'].find(query4).sort(sort, order).skip((page-1)*per_page).limit(per_page)
+        for i in list(fetch_query):
+            i["_id"] = str(i["_id"])
+            res["data"].append(i)
+        # print(len(res["data"]))
+        res["meta"] = {"count": count}
     return res
 
 
