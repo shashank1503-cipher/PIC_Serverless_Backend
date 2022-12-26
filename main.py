@@ -377,7 +377,9 @@ def fetch_projects(req: Request, q: str, page: int = 1, per_page: int = 10):
         count_interested = db['projects'].count_documents(
             {"_id": ObjectId(i['_id']), "interested_users": ObjectId(fetch_user_id)})
         if count_interested:
-            i['interested'] = True
+            i['is_user_interested'] = True
+        else:
+            i['is_user_interested'] = False
         if i.get("interested_users"):
             i.pop("interested_users")
         result.append(i)
@@ -411,11 +413,13 @@ def fetch_projects(req: Request, page: int = 1, per_page: int = 10):
         count_interested = db['projects'].count_documents(
             {"_id": ObjectId(i['_id']), "interested_users": ObjectId(fetch_user_id)})
         if count_interested:
-            i['interested'] = True
+            i['is_user_interested'] = True
+        else:
+            i['is_user_interested'] = False
         if i.get("interested_users"):
             i.pop("interested_users")
         result.append(i)
-
+        
     return {'meta': {'total_records': fetch_count, 'page': page, 'per_page': per_page}, 'data': result}
 
 
@@ -593,10 +597,7 @@ async def add_favourite(req: Request):
     if result['project_id']:
         try:
             db['projects'].update_one({"_id": ObjectId(result['project_id'])}, {
-                                      "$inc": {"interested": 1}})
-            print("Adding Interested User")
-            db['projects'].update_one({"_id": ObjectId(result['project_id'])}, {
-                                      "$push": {"interested_users": ObjectId(fetch_user.get("_id", None))}})
+                                      "$push": {"interested_users": ObjectId(fetch_user.get("_id"))}})
         except Exception as e:
             print("Error", e)
             raise HTTPException(
@@ -641,8 +642,6 @@ def delete_favourite(req: Request, id: str, is_project: bool = False):
         collection = db["favourites"]
         collection.delete_one(query)
         if is_project:
-            db["projects"].update_one({"_id": ObjectId(id)}, {
-                                      "$inc": {"interested": -1}})
             db["projects"].update_one({"_id": ObjectId(id)}, {
                                       "$pull": {"interested_users": fetch_user.get("_id", None)}})
         return {"meta": {"status": "success"}, "data": {}}
